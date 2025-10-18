@@ -177,22 +177,28 @@
     </div>
   </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-    import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+  <!-- Carga el SDK de Firebase usando el script de compatibilidad -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
+  <script>
+    // Tu configuración de Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyAlLsFkQhk-b80AFIrrjH6KMF_GIv043K4",
       authDomain: "weblistaqx.firebaseapp.com",
+      databaseURL: "https://weblistaqx-default-rtdb.firebaseio.com", // Añadido
       projectId: "weblistaqx",
-      storageBucket: "weblistaqx.appspot.com",
+      storageBucket: "weblistaqx.firebasestorage.app", // Ajustado
       messagingSenderId: "521432337715",
       appId: "1:521432337715:web:8f9f04e89e064a0d630246"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const patientsCol = query(collection(db, "patients"), orderBy("id"));
+    // Inicializa Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    // Obtiene la instancia de Firestore
+    const db = firebase.firestore(app);
+    // Crea la referencia a la colección con orden
+    const patientsCol = db.collection("patients").orderBy("id");
 
     const tbody = document.getElementById('patients-table-body');
     const debounceTimers = new Map();
@@ -231,14 +237,19 @@
       el.setSelectionRange(pos.start, pos.end);
     };
 
+    // Funciones para interactuar con Firestore usando el SDK de compatibilidad
     async function updatePatientFirestore(docId, updates) {
       if (!docId) return;
-      await updateDoc(doc(db, "patients", docId), updates);
+      await db.collection("patients").doc(docId).update(updates);
     }
 
     async function deletePatientFirestore(docId) {
       if (!docId) return;
-      await deleteDoc(doc(db, "patients", docId));
+      await db.collection("patients").doc(docId).delete();
+    }
+
+    async function addPatientToFirestore(newPatient) {
+        await db.collection("patients").add(newPatient);
     }
 
     function renderPendientes(container, pendientes, docId, localId) {
@@ -365,11 +376,10 @@
       return row;
     }
 
-    // Variable para prevenir múltiples clics rápidos
     let isAddingPatient = false;
 
     async function addPatient() {
-        if (isAddingPatient) return; // Prevenir ejecución si ya se está agregando
+        if (isAddingPatient) return;
         isAddingPatient = true;
 
         const newPatient = {
@@ -380,22 +390,21 @@
 
         const tempRow = document.createElement('tr');
         tempRow.className = 'pending-add-row';
-        tempRow.dataset.tempId = newPatient.id; // Usar ID local como identificador temporal
+        tempRow.dataset.tempId = newPatient.id;
         tempRow.innerHTML = '<td colspan="13" class="text-center py-2">Agregando paciente...</td>';
         tbody.appendChild(tempRow);
 
         try {
-            const docRef = await addDoc(patientsCol, newPatient);
-            // No hacer nada aquí, onSnapshot manejará la inserción
+            await addPatientToFirestore(newPatient);
+            // onSnapshot manejará la inserción
         } catch (error) {
             console.error("Error al agregar paciente: ", error);
-            // Remover la fila temporal en caso de error
-            if (tempRow.parentNode) { // Verificar si aún está en el DOM
+            if (tempRow.parentNode) {
                 tempRow.remove();
             }
-            alert("Error al agregar paciente: " + error.message); // Mostrar mensaje de error más específico
+            alert("Error al agregar paciente: " + error.message);
         } finally {
-            isAddingPatient = false; // Resetear el indicador
+            isAddingPatient = false;
         }
     }
 
@@ -435,24 +444,20 @@
     });
     // Fin Eventos del Modal
 
-    // --- Escuchar cambios en la colección ---
-    onSnapshot(patientsCol, { includeMetadataChanges: false }, snapshot => {
+    // Escuchar cambios en la colección usando el SDK de compatibilidad
+    // Importante: onSnapshot también cambia su uso en compatibilidad
+    patientsCol.onSnapshot(snapshot => {
       snapshot.docChanges().forEach(change => {
         const docSnap = change.doc;
         const patient = { ...docSnap.data(), docId: docSnap.id };
 
         if (change.type === "added") {
-          // Buscar la fila temporal correspondiente al ID local del paciente
           const tempRow = tbody.querySelector(`tr[data-temp-id="${patient.id}"]`);
           if (tempRow) {
-            // Reemplazar la fila temporal con la fila real
             const newRow = createPatientRow(patient);
             tbody.replaceChild(newRow, tempRow);
-            // Añadir la nueva fila al mapa
             rowElements.set(patient.docId, newRow);
           } else {
-            // Caso raro: documento aparece sin fila temporal previa (ej. al cargar la página)
-            // Intentar insertar en el orden correcto
             const newRow = createPatientRow(patient);
             let inserted = false;
             for (let i = 0; i < tbody.children.length; i++) {
