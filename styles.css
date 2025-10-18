@@ -1,0 +1,153 @@
+/* Custom styles for enhanced functionality */
+.patient-row {
+    transition: background-color 0.3s ease;
+}
+
+.patient-row.completed {
+    background-color: #dcfce7;
+}
+
+.patient-row:hover {
+    background-color: #f9fafb;
+}
+
+.editable-cell {
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.editable-cell:hover {
+    border-color: #e5e7eb;
+    background-color: #f9fafb;
+}
+
+.editable-cell:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background-color: white;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.date-input {
+    width: 120px;
+}
+
+.age-input {
+    width: 60px;
+}
+
+.phone-input {
+    width: 100px;
+}
+
+.diagnosis-input, .plan-input, .comment-input {
+    min-width: 150px;
+}
+
+.pendiente-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background-color: #f3f4f6;
+}
+
+.pendiente-checkbox {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #6b7280;
+    border-radius: 3px;
+    cursor: pointer;
+    position: relative;
+}
+
+.pendiente-checkbox:checked {
+    background-color: #10b981;
+    border-color: #10b981;
+}
+
+.pendiente-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    top: -2px;
+    left: 2px;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.pendiente-text {
+    flex: 1;
+    font-size: 14px;
+}
+
+.pendiente-text.completed {
+    text-decoration: line-through;
+    color: #6b7280;
+}
+
+.add-pendiente-btn {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
+}
+
+.add-pendiente-btn:hover {
+    background-color: #2563eb;
+}
+
+.attachment-indicator {
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.attachment-indicator.has-attachment {
+    color: #3b82f6;
+}
+
+.delete-btn {
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.delete-btn:hover {
+    background-color: #dc2626;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container {
+        padding: 1rem;
+    }
+    
+    table {
+        font-size: 14px;
+    }
+    
+    .editable-cell {
+        min-height: 32px;
+        padding: 4px 8px;
+        font-size: 14px;
+    }
+}
