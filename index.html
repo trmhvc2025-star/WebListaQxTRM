@@ -242,8 +242,6 @@
     }
 
     function capitalizeAfterPunctuation(str) {
-        // Divide por puntos, saltos de línea y espacios múltiples, capitaliza cada parte, y vuelve a unir.
-        // Esta es una aproximación simple. Puedes usar expresiones regulares más complejas si es necesario.
         return str.replace(/(^|[\.\!\?]\s+)([a-z])/g, (match, p1, p2) => p1 + p2.toUpperCase());
     }
 
@@ -255,7 +253,7 @@
         } else {
             value = capitalizeAfterPunctuation(value);
         }
-        if (input.value !== value) { // Solo actualizar si cambió
+        if (input.value !== value) {
             input.value = value;
             restoreCursor(input, pos);
         }
@@ -277,13 +275,17 @@
         await db.collection("patients").add(newPatient);
     }
 
+    // --- Corrección en renderPendientes ---
     function renderPendientes(container, pendientes, docId, localId) {
       container.innerHTML = '';
-      const sorted = [...pendientes].sort((a, b) => a.completed - b.completed);
-      sorted.forEach((p, index) => {
+      // Ordenar pendientes: completados al final
+      const sorted = [...pendientes].sort((a, b) => a.completed - b.completed); // 0 (false) antes que 1 (true)
+
+      sorted.forEach((p, indexInSorted) => { // indexInSorted es el índice en la lista ordenada
         const item = document.createElement('div');
         item.className = 'pendiente-item';
-        item.dataset.pendienteIndex = index;
+        // No usar indexInSorted como identificador si se va a ordenar
+        item.dataset.pendienteOriginalIndex = pendientes.indexOf(p); // Usar índice original para identificar
         item.innerHTML = `
           <input type="checkbox" class="pendiente-checkbox checkbox-custom" ${p.completed ? 'checked' : ''}>
           <textarea class="pendiente-text text-xs auto-resize" rows="1">${p.text}</textarea>`;
@@ -293,30 +295,37 @@
         const txt = item.querySelector('textarea');
         autoResizeTextarea(txt);
 
-        check.addEventListener('change', () => {
-          const patientRef = Array.from(rowElements.values()).find(row => row.dataset.id === docId);
-          if (patientRef) {
-              const patientData = patientRef.patientData;
-              patientData.pendientes[index].completed = check.checked;
-              updatePatientFirestore(docId, { pendientes: patientData.pendientes });
-              renderPendientes(container, patientData.pendientes, docId, localId);
-          }
-        });
+        // Capturar referencias al paciente y pendiente específico
+        const patientRef = Array.from(rowElements.values()).find(row => row.dataset.id === docId);
+        if (patientRef) {
+          const patientData = patientRef.patientData;
+          const pendienteRef = p; // Referencia al objeto pendiente específico
+          const originalIndex = patientData.pendientes.indexOf(pendienteRef); // Encontrar índice en el array original
 
-        txt.addEventListener('input', () => {
-          const pos = saveCursor(txt);
-          const patientRef = Array.from(rowElements.values()).find(row => row.dataset.id === docId);
-          if (patientRef) {
-              const patientData = patientRef.patientData;
-              patientData.pendientes[index].text = txt.value;
-              autoResizeTextarea(txt);
-              debounceUpdate(`pend-${docId}-${index}`, async () => {
-                await updatePatientFirestore(docId, { pendientes: patientData.pendientes });
-              }, 800);
-          }
-        });
+          check.addEventListener('change', () => {
+              // Actualizar estado local
+              pendienteRef.completed = check.checked;
+              // Guardar en Firestore
+              updatePatientFirestore(docId, { pendientes: patientData.pendientes });
+              // Volver a renderizar para reflejar orden y estado
+              renderPendientes(container, patientData.pendientes, docId, localId);
+          });
+
+          txt.addEventListener('input', () => {
+            const pos = saveCursor(txt);
+            // Actualizar estado local
+            pendienteRef.text = txt.value;
+            autoResizeTextarea(txt);
+            debounceUpdate(`pend-${docId}-${originalIndex}`, async () => {
+              await updatePatientFirestore(docId, { pendientes: patientData.pendientes });
+              // Opcional: restaurar cursor aquí si es necesario después de guardar
+              // restoreCursor(txt, pos); // No es necesario si no se vuelve a renderizar aquí
+            }, 800);
+          });
+        }
       });
     }
+    // --- Fin Corrección ---
 
     function createPatientRow(patientData) {
       const row = document.createElement('tr');
@@ -353,12 +362,17 @@
           pendienteInput.focus();
       });
 
-      row.querySelector('.complete-checkbox').addEventListener('change', async e => {
+      // --- Actualización del evento de checkbox de completo ---
+      const completeCheckbox = row.querySelector('.complete-checkbox');
+      completeCheckbox.addEventListener('change', async e => {
         const newValue = e.target.checked;
         patientData.complete = newValue;
         row.classList.toggle('bg-light-green', newValue);
         await updatePatientFirestore(patientData.docId, { complete: newValue });
+        // Opcional: Reordenar filas inmediatamente en el frontend si no se quiere esperar a onSnapshot
+        // updatePatientNumbers(); // updatePatientNumbers ya se llama al final de onSnapshot
       });
+      // --- Fin actualización ---
 
       row.querySelector('.delete-btn').addEventListener('click', async () => {
         if (confirm('¿Eliminar este paciente?')) {
@@ -382,11 +396,9 @@
         else if (fieldClass === 'iea') fieldFirestore = 'iea';
         else return;
 
-        // --- Aplicar formato de mayúsculas ---
         const isNameField = fieldClass === 'name';
         input.addEventListener('input', () => {
           applyFormatting(input, isNameField);
-          // Continuar con la lógica de guardado
           const pos = saveCursor(input);
           const newValue = input.value;
           patientData[fieldFirestore] = newValue;
@@ -399,23 +411,19 @@
           }, 800);
         });
 
-        // Aplicar formato también al presionar Enter (para mayúscula después de Enter)
-        if (fieldClass !== 'age' && fieldClass !== 'ci' && fieldClass !== 'nh' && fieldClass !== 'phone' && fieldClass !== 'iea') { // No en campos numéricos o de un solo valor
+        if (fieldClass !== 'age' && fieldClass !== 'ci' && fieldClass !== 'nh' && fieldClass !== 'phone' && fieldClass !== 'iea') {
             input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { // Enter sin Shift
+                if (e.key === 'Enter' && !e.shiftKey) {
                     const pos = saveCursor(input);
                     let value = input.value;
-                    // Añadir un salto de línea y aplicar formato
                     const start = pos.start;
                     const end = pos.end;
                     input.value = value.substring(0, start) + '\n' + value.substring(end);
                     applyFormatting(input, isNameField);
-                    // Colocar cursor después del salto de línea
                     input.setSelectionRange(start + 1, start + 1);
                 }
             });
         }
-        // --- Fin Aplicar formato de mayúsculas ---
 
         if (input.tagName === 'TEXTAREA') {
             setTimeout(() => autoResizeTextarea(input), 0);
@@ -506,19 +514,22 @@
             rowElements.set(patient.docId, newRow);
           } else {
             const newRow = createPatientRow(patient);
-            let inserted = false;
-            for (let i = 0; i < tbody.children.length; i++) {
-              const existingRow = tbody.children[i];
-              const existingPatient = existingRow.patientData;
-              if (existingPatient && existingPatient.id > patient.id) {
-                  tbody.insertBefore(newRow, existingRow);
-                  inserted = true;
-                  break;
-              }
-            }
-            if (!inserted) {
-                tbody.appendChild(newRow);
-            }
+            // No insertamos aquí, dejamos que se reordene después
+            // Buscar posición basada en 'id' (antes de 'complete')
+            // let inserted = false;
+            // for (let i = 0; i < tbody.children.length; i++) {
+            //   const existingRow = tbody.children[i];
+            //   const existingPatient = existingRow.patientData;
+            //   if (existingPatient && existingPatient.id > patient.id) {
+            //       tbody.insertBefore(newRow, existingRow);
+            //       inserted = true;
+            //       break;
+            //   }
+            // }
+            // if (!inserted) {
+            //     tbody.appendChild(newRow);
+            // }
+            tbody.appendChild(newRow); // Añadir al final temporalmente
             rowElements.set(patient.docId, newRow);
           }
         } else if (change.type === "modified") {
@@ -543,7 +554,20 @@
           }
         }
       });
-      updatePatientNumbers();
+
+      // --- Reordenar filas después de procesar todos los cambios ---
+      // Ordenar filas: completados al final
+      const rows = Array.from(tbody.children);
+      rows.sort((a, b) => {
+          const patientA = a.patientData || { complete: false }; // Por si acaso
+          const patientB = b.patientData || { complete: false };
+          return patientA.complete - patientB.complete; // 0 (false) antes que 1 (true)
+      });
+
+      // Volver a insertar en el orden correcto
+      rows.forEach(row => tbody.appendChild(row));
+
+      updatePatientNumbers(); // Actualizar números después de reordenar
     });
   </script>
 </body>
