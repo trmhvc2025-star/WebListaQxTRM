@@ -177,7 +177,6 @@
     </div>
   </div>
 
-  <!-- Carga el SDK de Firebase usando el script de compatibilidad -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
@@ -236,6 +235,32 @@
       if (!pos || document.activeElement !== el) return;
       el.setSelectionRange(pos.start, pos.end);
     };
+
+    // --- Funciones de Formato de Mayúsculas ---
+    function capitalizeAfterSpaces(str) {
+        return str.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+    function capitalizeAfterPunctuation(str) {
+        // Divide por puntos, saltos de línea y espacios múltiples, capitaliza cada parte, y vuelve a unir.
+        // Esta es una aproximación simple. Puedes usar expresiones regulares más complejas si es necesario.
+        return str.replace(/(^|[\.\!\?]\s+)([a-z])/g, (match, p1, p2) => p1 + p2.toUpperCase());
+    }
+
+    function applyFormatting(input, isNameField = false) {
+        const pos = saveCursor(input);
+        let value = input.value;
+        if (isNameField) {
+            value = capitalizeAfterSpaces(value);
+        } else {
+            value = capitalizeAfterPunctuation(value);
+        }
+        if (input.value !== value) { // Solo actualizar si cambió
+            input.value = value;
+            restoreCursor(input, pos);
+        }
+    }
+    // --- Fin Funciones de Formato de Mayúsculas ---
 
     // Funciones para interactuar con Firestore usando el SDK de compatibilidad
     async function updatePatientFirestore(docId, updates) {
@@ -357,7 +382,11 @@
         else if (fieldClass === 'iea') fieldFirestore = 'iea';
         else return;
 
+        // --- Aplicar formato de mayúsculas ---
+        const isNameField = fieldClass === 'name';
         input.addEventListener('input', () => {
+          applyFormatting(input, isNameField);
+          // Continuar con la lógica de guardado
           const pos = saveCursor(input);
           const newValue = input.value;
           patientData[fieldFirestore] = newValue;
@@ -369,6 +398,25 @@
             await updatePatientFirestore(patientData.docId, updates);
           }, 800);
         });
+
+        // Aplicar formato también al presionar Enter (para mayúscula después de Enter)
+        if (fieldClass !== 'age' && fieldClass !== 'ci' && fieldClass !== 'nh' && fieldClass !== 'phone' && fieldClass !== 'iea') { // No en campos numéricos o de un solo valor
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { // Enter sin Shift
+                    const pos = saveCursor(input);
+                    let value = input.value;
+                    // Añadir un salto de línea y aplicar formato
+                    const start = pos.start;
+                    const end = pos.end;
+                    input.value = value.substring(0, start) + '\n' + value.substring(end);
+                    applyFormatting(input, isNameField);
+                    // Colocar cursor después del salto de línea
+                    input.setSelectionRange(start + 1, start + 1);
+                }
+            });
+        }
+        // --- Fin Aplicar formato de mayúsculas ---
+
         if (input.tagName === 'TEXTAREA') {
             setTimeout(() => autoResizeTextarea(input), 0);
         }
@@ -445,7 +493,6 @@
     // Fin Eventos del Modal
 
     // Escuchar cambios en la colección usando el SDK de compatibilidad
-    // Importante: onSnapshot también cambia su uso en compatibilidad
     patientsCol.onSnapshot(snapshot => {
       snapshot.docChanges().forEach(change => {
         const docSnap = change.doc;
